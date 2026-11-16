@@ -41,19 +41,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.curriculum.PedagogicalData
+import com.example.data.visual.VisualCatalog
 import com.example.domain.engine.SpacedRepetitionEngine
 import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
 import com.example.domain.model.ExerciseStage
+import com.example.domain.model.VisualScaffoldLevel
 import com.example.ui.components.AtelierCard
 import com.example.ui.components.HonestTutorFeedbackCard
-import com.example.ui.components.LessonDiagramCard
 import com.example.ui.components.MasteryPill
 import com.example.ui.components.RecallCheckCard
 import com.example.ui.components.SelfAssessmentSection
 import com.example.ui.components.SketchbookTimerBar
 import com.example.ui.components.StructuredExerciseCard
 import com.example.ui.components.TactilePrimaryButton
+import com.example.ui.components.visual.VisualDemonstrationPlayer
 import com.example.ui.theme.AtelierSage
 import com.example.ui.theme.BlueprintCobalt
 import com.example.ui.theme.DustyCrimson
@@ -286,13 +288,24 @@ fun ReviewScreen(
                     )
                 }
 
-                if (lesson != null) {
-                    item {
-                        LessonDiagramCard(
-                            diagramType = lesson.diagramType,
-                            caption = lesson.diagramCaption
-                        )
+                item {
+                    val reviewDemo = remember(drill.skill.id, lesson?.id) {
+                        lesson?.let { VisualCatalog.getDemoForLesson(it) }
+                            ?: VisualCatalog.getDemoForSkill(drill.skill.id)
                     }
+                    val reviewScaffold = when {
+                        drill.mastery.delayedCheckPending || recommendedStage == ExerciseStage.UNFAMILIAR_APPLICATION ->
+                            VisualScaffoldLevel.MEMORY_PROMPT
+                        recommendedStage == ExerciseStage.INDEPENDENT_PRACTICE ->
+                            VisualScaffoldLevel.PARTIAL_GUIDANCE
+                        else -> VisualScaffoldLevel.FULL_GUIDANCE
+                    }
+                    VisualDemonstrationPlayer(
+                        demo = reviewDemo,
+                        scaffoldLevel = reviewScaffold,
+                        compact = true,
+                        headerOverride = "ADAPTIVE VISUAL SCAFFOLD • ${reviewScaffold.label.uppercase()}"
+                    )
                 }
 
                 if (exercise != null) {

@@ -68,6 +68,7 @@ fun HomeScreen(
     onOpenReviewTab: () -> Unit,
     onOpenObservations: () -> Unit,
     onOpenCurriculumMap: () -> Unit,
+    onOpenVisualLibrary: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val practicedToday = StreakAndXpEngine.isMeaningfulPracticeDay(state.dailyActivityMap[state.todayEpochDay])
@@ -398,34 +399,48 @@ fun HomeScreen(
 
             // Quick Exploration Shortcuts
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onOpenObservations,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(),
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 52.dp)
-                            .testTag("home_observations_button")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Filled.Explore, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Life Challenges")
+                        OutlinedButton(
+                            onClick = onOpenObservations,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 52.dp)
+                                .testTag("home_observations_button")
+                        ) {
+                            Icon(Icons.Filled.Explore, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Life Challenges")
+                        }
+                        OutlinedButton(
+                            onClick = onOpenCurriculumMap,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 52.dp)
+                                .testTag("home_curriculum_map_button")
+                        ) {
+                            Icon(Icons.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("12-World Map")
+                        }
                     }
                     OutlinedButton(
-                        onClick = onOpenCurriculumMap,
+                        onClick = onOpenVisualLibrary,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .heightIn(min = 52.dp)
-                            .testTag("home_curriculum_map_button")
+                            .testTag("home_visual_library_button")
                     ) {
-                        Icon(Icons.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("12-World Map")
+                        Icon(Icons.Filled.Brush, contentDescription = null, modifier = Modifier.size(18.dp), tint = BlueprintCobalt)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Visual Study Library (33 Animated Construction Demos)")
                     }
                 }
             }

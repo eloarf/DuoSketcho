@@ -64,6 +64,7 @@ fun LearnScreen(
     onOpenPracticeLibrary: () -> Unit,
     onOpenObservations: () -> Unit,
     onOpenCurriculumMap: () -> Unit,
+    onOpenVisualLibrary: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expandedWorldNumber by rememberSaveable {
@@ -109,35 +110,49 @@ fun LearnScreen(
                 }
             }
 
-            // Practice Library & Observation Challenges quick bar
+            // Visual Study Library, Practice Library & Observation Challenges quick bar
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = onOpenPracticeLibrary,
+                        onClick = onOpenVisualLibrary,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .heightIn(min = 48.dp)
-                            .testTag("practice_library_button")
+                            .testTag("learn_visual_library_button")
                     ) {
-                        Icon(Icons.Filled.FitnessCenter, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp), tint = BlueprintCobalt)
                         Spacer(Modifier.width(6.dp))
-                        Text("Drill Library")
+                        Text("Visual Study Library (Categories A–H)")
                     }
-                    OutlinedButton(
-                        onClick = onOpenObservations,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp)
-                            .testTag("observation_challenges_button")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Filled.Explore, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Observations")
+                        OutlinedButton(
+                            onClick = onOpenPracticeLibrary,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("practice_library_button")
+                        ) {
+                            Icon(Icons.Filled.FitnessCenter, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Drill Library")
+                        }
+                        OutlinedButton(
+                            onClick = onOpenObservations,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("observation_challenges_button")
+                        ) {
+                            Icon(Icons.Filled.Explore, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Observations")
+                        }
                     }
                 }
             }

@@ -54,19 +54,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.curriculum.CurriculumCatalog
 import com.example.data.curriculum.PedagogicalData
+import com.example.data.visual.VisualCatalog
 import com.example.domain.engine.SpacedRepetitionEngine
 import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
 import com.example.domain.model.Lesson
+import com.example.domain.model.VisualScaffoldLevel
 import com.example.ui.components.AtelierCard
 import com.example.ui.components.HonestTutorFeedbackCard
-import com.example.ui.components.LessonDiagramCard
 import com.example.ui.components.MasteryPill
 import com.example.ui.components.RecallCheckCard
 import com.example.ui.components.SelfAssessmentSection
 import com.example.ui.components.SketchbookTimerBar
 import com.example.ui.components.StructuredExerciseCard
 import com.example.ui.components.TactilePrimaryButton
+import com.example.ui.components.visual.MistakeComparisonCard
+import com.example.ui.components.visual.VisualDemonstrationPlayer
 import com.example.ui.theme.AtelierSage
 import com.example.ui.theme.BlueprintCobalt
 import com.example.ui.theme.DustyCrimson
@@ -123,6 +126,7 @@ fun LessonDetailScreen(
     val skillName = CurriculumCatalog.getSkillById(lesson.primarySkillId)?.name ?: lesson.primarySkillId
     val weakPrereqNames = SpacedRepetitionEngine.findWeakPrerequisites(lesson.primarySkillId, state.skillMasteryMap)
         .map { it.name }
+    val visualDemo = remember(lesson.id) { VisualCatalog.getDemoForLesson(lesson) }
 
     val progress = ((currentStage + 1).toFloat() / teachingStageTitles.size.toFloat()).coerceIn(0f, 1f)
 
@@ -281,6 +285,15 @@ fun LessonDetailScreen(
                         }
 
                         item {
+                            VisualDemonstrationPlayer(
+                                demo = visualDemo,
+                                scaffoldLevel = VisualScaffoldLevel.REFERENCE_ONLY,
+                                compact = true,
+                                headerOverride = "GOAL VISUAL REFERENCE • STUDY ON PAPER"
+                            )
+                        }
+
+                        item {
                             AtelierCard {
                                 Row(
                                     modifier = Modifier
@@ -327,10 +340,11 @@ fun LessonDetailScreen(
                     // STAGE 2: OBSERVE
                     1 -> {
                         item {
-                            LessonDiagramCard(
-                                diagramType = lesson.diagramType,
-                                caption = lesson.diagramCaption,
-                                label = "2. OBSERVE VISUAL EXAMPLE"
+                            VisualDemonstrationPlayer(
+                                demo = visualDemo,
+                                scaffoldLevel = VisualScaffoldLevel.FULL_GUIDANCE,
+                                compact = false,
+                                headerOverride = "2. OBSERVE ANIMATED CONSTRUCTION"
                             )
                         }
                         if (lesson.cumulativeSkillsLabel.isNotBlank()) {
@@ -462,10 +476,22 @@ fun LessonDetailScreen(
                                 }
                             }
                         }
+
+                        item {
+                            MistakeComparisonCard(comparison = visualDemo.comparison)
+                        }
                     }
 
                     // STAGE 4: GUIDED PRACTICE
                     3 -> {
+                        item {
+                            VisualDemonstrationPlayer(
+                                demo = visualDemo,
+                                scaffoldLevel = VisualScaffoldLevel.FULL_GUIDANCE,
+                                compact = true,
+                                headerOverride = "4. GUIDED VISUAL SCAFFOLD — FOLLOW STAGE BY STAGE"
+                            )
+                        }
                         val ex1 = lesson.exercises.getOrNull(0)
                         if (ex1 != null) {
                             item {
@@ -483,6 +509,14 @@ fun LessonDetailScreen(
 
                     // STAGE 5: REPETITION
                     4 -> {
+                        item {
+                            VisualDemonstrationPlayer(
+                                demo = visualDemo,
+                                scaffoldLevel = VisualScaffoldLevel.PARTIAL_GUIDANCE,
+                                compact = true,
+                                headerOverride = "5. REPETITION — REDUCED GUIDES (VARY ANGLE OR SCALE)"
+                            )
+                        }
                         val ex2 = lesson.exercises.getOrNull(1)
                         if (ex2 != null) {
                             item {
@@ -501,6 +535,14 @@ fun LessonDetailScreen(
                     // STAGE 6: INDEPENDENT APPLICATION + OPTIONAL CHALLENGE
                     5 -> {
                         val ex3 = lesson.exercises.getOrNull(2)
+                        item {
+                            VisualDemonstrationPlayer(
+                                demo = visualDemo,
+                                scaffoldLevel = if (ex3?.isUnguided == true) VisualScaffoldLevel.MEMORY_PROMPT else VisualScaffoldLevel.REFERENCE_ONLY,
+                                compact = true,
+                                headerOverride = "6. INDEPENDENT APPLICATION — CONSTRUCT ON PAPER FIRST"
+                            )
+                        }
                         if (ex3 != null) {
                             item {
                                 StructuredExerciseCard(

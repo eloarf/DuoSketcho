@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,8 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -19,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -43,11 +48,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.curriculum.CurriculumCatalog
 import com.example.data.curriculum.ReferenceLibraryData
+import com.example.data.visual.VisualCatalog
 import com.example.domain.model.MilestoneProject
 import com.example.domain.model.ObservationChallenge
+import com.example.domain.model.VisualScaffoldLevel
 import com.example.ui.components.AtelierCard
 import com.example.ui.components.SketchbookTimerBar
 import com.example.ui.components.TactilePrimaryButton
+import com.example.ui.components.visual.MistakeComparisonCard
+import com.example.ui.components.visual.VisualDemonstrationPlayer
 import com.example.ui.theme.AtelierSage
 import com.example.ui.theme.BlueprintCobalt
 import com.example.ui.theme.DustyCrimson
@@ -116,6 +125,18 @@ fun MilestoneProjectScreen(
                         running = state.timerRunning,
                         onToggle = onToggleTimer,
                         onReset = onResetTimer
+                    )
+                }
+
+                item {
+                    val capstoneDemo = remember(project.worldNumber) {
+                        VisualCatalog.getDemoForWorld(project.worldNumber)
+                    }
+                    VisualDemonstrationPlayer(
+                        demo = capstoneDemo,
+                        scaffoldLevel = VisualScaffoldLevel.REFERENCE_ONLY,
+                        compact = true,
+                        headerOverride = "WORLD ${project.worldNumber} VISUAL CONSTRUCTION REFERENCE"
                     )
                 }
 
@@ -374,6 +395,7 @@ fun MistakeLibraryScreen(
     onOpenLesson: (String) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var expandedMistakeId by remember { mutableStateOf<String?>(null) }
     val filtered = remember(query) {
         val q = query.trim().lowercase()
         if (q.isEmpty()) ReferenceLibraryData.mistakes
@@ -415,8 +437,14 @@ fun MistakeLibraryScreen(
                 }
 
                 items(filtered, key = { it.id }) { item ->
+                    val expanded = expandedMistakeId == item.id
+                    val visualDemo = remember(item.id) {
+                        VisualCatalog.getDemoForMistake(item.id, item.relatedLessonId)
+                    }
                     AtelierCard(
-                        modifier = Modifier.clickable { onOpenLesson(item.relatedLessonId) }
+                        modifier = Modifier.clickable {
+                            expandedMistakeId = if (expanded) null else item.id
+                        }
                     ) {
                         Text(
                             text = "World ${item.worldNumber}: ${item.worldTitle}",
@@ -430,6 +458,31 @@ fun MistakeLibraryScreen(
                         Text("Cause: ${item.rootCause}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
                         Text("Corrective Drill: ${item.correctiveDrill}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = AtelierSage)
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { expandedMistakeId = if (expanded) null else item.id },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                            ) {
+                                Icon(Icons.Filled.Compare, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (expanded) "Hide Visual" else "Visual Fix", style = MaterialTheme.typography.labelSmall)
+                            }
+                            OutlinedButton(
+                                onClick = { onOpenLesson(item.relatedLessonId) },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                            ) {
+                                Text("Open Lesson", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        AnimatedVisibility(visible = expanded) {
+                            Column(modifier = Modifier.padding(top = 10.dp)) {
+                                MistakeComparisonCard(comparison = visualDemo.comparison)
+                            }
+                        }
                     }
                 }
             }

@@ -61,6 +61,7 @@ import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.ProgressScreen
 import com.example.ui.screens.ReviewScreen
 import com.example.ui.screens.SketchbookJournalScreen
+import com.example.ui.screens.VisualLibraryScreen
 import com.example.ui.theme.DrawingAcademyTheme
 import com.example.viewmodel.AcademyViewModel
 
@@ -75,6 +76,7 @@ object AcademyRoutes {
     const val SESSION = "session/{mode}"
     const val MILESTONE = "milestone/{worldNumber}"
     const val PRACTICE_LIBRARY = "practice_library"
+    const val VISUAL_LIBRARY = "visual_library"
     const val OBSERVATIONS = "observations"
     const val MISTAKE_LIBRARY = "mistake_library"
     const val GLOSSARY = "glossary"
@@ -221,7 +223,8 @@ fun DrawingAcademyApp(
                                     },
                                     onOpenReviewTab = { navigateTopLevel(AcademyRoutes.REVIEW) },
                                     onOpenObservations = { navController.navigate(AcademyRoutes.OBSERVATIONS) },
-                                    onOpenCurriculumMap = { navController.navigate(AcademyRoutes.CURRICULUM_MAP) }
+                                    onOpenCurriculumMap = { navController.navigate(AcademyRoutes.CURRICULUM_MAP) },
+                                    onOpenVisualLibrary = { navController.navigate(AcademyRoutes.VISUAL_LIBRARY) }
                                 )
                             }
 
@@ -238,7 +241,8 @@ fun DrawingAcademyApp(
                                     },
                                     onOpenPracticeLibrary = { navController.navigate(AcademyRoutes.PRACTICE_LIBRARY) },
                                     onOpenObservations = { navController.navigate(AcademyRoutes.OBSERVATIONS) },
-                                    onOpenCurriculumMap = { navController.navigate(AcademyRoutes.CURRICULUM_MAP) }
+                                    onOpenCurriculumMap = { navController.navigate(AcademyRoutes.CURRICULUM_MAP) },
+                                    onOpenVisualLibrary = { navController.navigate(AcademyRoutes.VISUAL_LIBRARY) }
                                 )
                             }
 
@@ -424,6 +428,16 @@ fun DrawingAcademyApp(
                                     onOpenWorldMilestone = { worldNum ->
                                         viewModel.resetTimer()
                                         navController.navigate(AcademyRoutes.milestone(worldNum))
+                                    }
+                                )
+                            }
+
+                            composable(AcademyRoutes.VISUAL_LIBRARY) {
+                                VisualLibraryScreen(
+                                    onBack = { navController.popBackStack() },
+                                    onOpenLesson = { lessonId ->
+                                        viewModel.resetTimer()
+                                        navController.navigate(AcademyRoutes.lesson(lessonId))
                                     }
                                 )
                             }

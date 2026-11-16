@@ -41,14 +41,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.BackHandler
 import com.example.data.curriculum.CurriculumCatalog
+import com.example.data.visual.VisualCatalog
 import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
 import com.example.domain.model.GuidedSessionPlan
+import com.example.domain.model.VisualScaffoldLevel
 import com.example.ui.components.AtelierCard
-import com.example.ui.components.LessonDiagramCard
 import com.example.ui.components.SelfAssessmentSection
 import com.example.ui.components.SketchbookTimerBar
 import com.example.ui.components.TactilePrimaryButton
+import com.example.ui.components.visual.VisualDemonstrationPlayer
 import com.example.ui.theme.AtelierSage
 import com.example.ui.theme.BlueprintCobalt
 import com.example.viewmodel.AcademyUiState
@@ -191,11 +193,24 @@ fun GuidedSessionScreen(
                         }
                     }
 
-                    if (stepLesson != null) {
+                    val stepDemo = when {
+                        stepLesson != null -> VisualCatalog.getDemoForLesson(stepLesson)
+                        step.phaseLabel.contains("Warm", ignoreCase = true) -> VisualCatalog.getById("vis_confident_lines")
+                        else -> null
+                    }
+                    if (stepDemo != null) {
+                        val stepScaffold = when {
+                            step.phaseLabel.contains("Review", ignoreCase = true) -> VisualScaffoldLevel.PARTIAL_GUIDANCE
+                            step.phaseLabel.contains("Warm", ignoreCase = true) -> VisualScaffoldLevel.PARTIAL_GUIDANCE
+                            step.phaseLabel.contains("Challenge", ignoreCase = true) -> VisualScaffoldLevel.MEMORY_PROMPT
+                            else -> VisualScaffoldLevel.FULL_GUIDANCE
+                        }
                         item {
-                            LessonDiagramCard(
-                                diagramType = stepLesson.diagramType,
-                                caption = stepLesson.learningObjective
+                            VisualDemonstrationPlayer(
+                                demo = stepDemo,
+                                scaffoldLevel = stepScaffold,
+                                compact = true,
+                                headerOverride = "${step.phaseLabel.uppercase()} VISUAL GUIDE"
                             )
                         }
                     }
