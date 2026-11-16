@@ -314,7 +314,9 @@ fun SelfAssessmentSection(
     onToggleCheck: (Int) -> Unit,
     selectedRating: DifficultyRating,
     onSelectRating: (DifficultyRating) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedConfidence: com.example.domain.model.ConfidenceLevel = com.example.domain.model.ConfidenceLevel.MODERATE,
+    onSelectConfidence: ((com.example.domain.model.ConfidenceLevel) -> Unit)? = null
 ) {
     AtelierCard(modifier = modifier) {
         Text(
@@ -355,7 +357,7 @@ fun SelfAssessmentSection(
 
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "How did this feel in your sketchbook?",
+            text = "How difficult did this exercise feel?",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold
         )
@@ -386,6 +388,311 @@ fun SelfAssessmentSection(
                 )
             }
         }
+
+        if (onSelectConfidence != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "How confident are you repeating this tomorrow?",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                com.example.domain.model.ConfidenceLevel.entries.forEach { level ->
+                    val selected = selectedConfidence == level
+                    val chipColor = when (level) {
+                        com.example.domain.model.ConfidenceLevel.LOW -> DustyCrimson
+                        com.example.domain.model.ConfidenceLevel.MODERATE -> OchreGold
+                        com.example.domain.model.ConfidenceLevel.HIGH -> AtelierSage
+                    }
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onSelectConfidence(level) },
+                        label = { Text(level.shortLabel) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = chipColor.copy(alpha = 0.18f),
+                            selectedLabelColor = chipColor
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag("confidence_chip_${level.name.lowercase()}")
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StructuredExerciseCard(
+    exercise: com.example.domain.model.PracticalExercise,
+    checked: Boolean,
+    onToggleDone: () -> Unit,
+    showScaffoldHints: Boolean = true,
+    onToggleScaffoldHints: (() -> Unit)? = null,
+    checkboxTag: String = "exercise_checkbox_0",
+    modifier: Modifier = Modifier
+) {
+    var stretchExpanded = androidx.compose.runtime.remember(exercise.id) { androidx.compose.runtime.mutableStateOf(false) }
+
+    AtelierCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(BlueprintCobalt.copy(alpha = 0.14f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Stage ${exercise.stage.stageNumber} • ${exercise.stage.displayName}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = BlueprintCobalt
+                    )
+                }
+                if (exercise.isUnguided) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(TerracottaFlame.copy(alpha = 0.14f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Unguided",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TerracottaFlame
+                        )
+                    }
+                }
+            }
+            Checkbox(
+                checked = checked,
+                onCheckedChange = { onToggleDone() },
+                modifier = Modifier.testTag(checkboxTag)
+            )
+        }
+
+        Text(
+            text = exercise.title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Reps: ${exercise.repetitions}  •  Suggested pace: ~${exercise.estimatedMinutes} min (focus on control, not speed)",
+            style = MaterialTheme.typography.labelMedium,
+            color = AtelierSage,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(10.dp))
+
+        Text(
+            text = "WHAT TO DRAW",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = BlueprintCobalt
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = exercise.instructions,
+            style = MaterialTheme.typography.bodyLarge
+        )
+
+        if (exercise.isUnguided && onToggleScaffoldHints != null) {
+            Spacer(Modifier.height(8.dp))
+            TextButton(
+                onClick = onToggleScaffoldHints,
+                modifier = Modifier.testTag("toggle_unguided_hints")
+            ) {
+                Text(if (showScaffoldHints) "Hide coaching hints (Pure Unguided Mode)" else "Show coaching hints")
+            }
+        }
+
+        if (showScaffoldHints) {
+            if (exercise.techniqueFocus.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "CONCENTRATE ON",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(text = exercise.techniqueFocus, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            if (exercise.mistakesToAvoid.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "AVOID THIS MISTAKE",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = DustyCrimson
+                )
+                Text(text = exercise.mistakesToAvoid, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            if (exercise.successCriteria.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "WHAT SUCCESS SHOWS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = AtelierSage
+                )
+                Text(text = exercise.successCriteria, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        if (exercise.harderVariation.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { stretchExpanded.value = !stretchExpanded.value },
+                modifier = Modifier.heightIn(min = 44.dp)
+            ) {
+                Text(if (stretchExpanded.value) "Hide Harder Variation" else "Ready to Push Further? (Harder Variation)")
+            }
+            if (stretchExpanded.value) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = exercise.harderVariation,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OchreGold,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RecallCheckCard(
+    question: com.example.domain.model.RecallQuestion,
+    selectedIndex: Int?,
+    onSelectOption: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AtelierCard(modifier = modifier) {
+        Text(
+            text = "CONCEPT RECALL CHECK",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = BlueprintCobalt
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = question.prompt,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(8.dp))
+        question.options.forEachIndexed { idx, option ->
+            val isSelected = selectedIndex == idx
+            val isCorrect = idx == question.correctIndex
+            val bg = when {
+                selectedIndex == null -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                isSelected && isCorrect -> AtelierSage.copy(alpha = 0.16f)
+                isSelected && !isCorrect -> DustyCrimson.copy(alpha = 0.16f)
+                isCorrect -> AtelierSage.copy(alpha = 0.10f)
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            }
+            val borderCol = when {
+                selectedIndex == null -> MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                isCorrect -> AtelierSage
+                isSelected -> DustyCrimson
+                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(bg)
+                    .border(1.dp, borderCol, RoundedCornerShape(12.dp))
+                    .clickable { onSelectOption(idx) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("recall_option_$idx"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = option,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                )
+            }
+        }
+        if (selectedIndex != null) {
+            Spacer(Modifier.height(8.dp))
+            val right = selectedIndex == question.correctIndex
+            Text(
+                text = if (right) "Spot on: ${question.explanation}" else "Key takeaway: ${question.explanation}",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (right) AtelierSage else TerracottaFlame,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+fun HonestTutorFeedbackCard(
+    feedback: com.example.domain.model.HonestEvaluationFeedback,
+    modifier: Modifier = Modifier
+) {
+    AtelierCard(
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f),
+        borderColor = BlueprintCobalt.copy(alpha = 0.45f)
+    ) {
+        Text(
+            text = "HONEST TUTOR GUIDANCE",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = BlueprintCobalt
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = feedback.headline,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(6.dp))
+        feedback.observations.forEach { obs ->
+            Text(
+                text = "• $obs",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(vertical = 2.dp)
+            )
+        }
+        if (feedback.prerequisiteAlert != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = feedback.prerequisiteAlert,
+                style = MaterialTheme.typography.bodySmall,
+                color = TerracottaFlame,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Next Step: ${feedback.nextStepAdvice}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

@@ -19,12 +19,26 @@ enum class DiagramType {
     IMAGINATION_SYNTHESIS
 }
 
+enum class ExerciseStage(val displayName: String, val stageNumber: Int, val summary: String) {
+    GUIDED_PRACTICE("Guided Practice", 1, "Follow structured cues and focus on core mechanics"),
+    INDEPENDENT_PRACTICE("Independent Repetition", 2, "Vary scale, angle, or subject with lighter scaffolding"),
+    UNFAMILIAR_APPLICATION("Independent Application", 3, "Apply the skill to an unfamiliar or unguided subject")
+}
+
+data class RecallQuestion(
+    val prompt: String,
+    val options: List<String>,
+    val correctIndex: Int,
+    val explanation: String
+)
+
 data class SkillDefinition(
     val id: String,
     val name: String,
     val worldNumber: Int,
     val category: String,
-    val description: String
+    val description: String,
+    val prerequisiteSkillIds: List<String> = emptyList()
 )
 
 data class MistakeCorrection(
@@ -39,7 +53,13 @@ data class PracticalExercise(
     val repetitions: String,
     val estimatedMinutes: Int,
     val skillId: String,
-    val isChallenge: Boolean = false
+    val isChallenge: Boolean = false,
+    val stage: ExerciseStage = ExerciseStage.GUIDED_PRACTICE,
+    val techniqueFocus: String = "",
+    val mistakesToAvoid: String = "",
+    val successCriteria: String = "",
+    val harderVariation: String = "",
+    val isUnguided: Boolean = false
 )
 
 data class Lesson(
@@ -63,7 +83,11 @@ data class Lesson(
     val diagramType: DiagramType,
     val primarySkillId: String,
     val reinforcedSkillIds: List<String>,
-    val xpReward: Int = 35
+    val xpReward: Int = 35,
+    val recallQuestion: RecallQuestion,
+    val prerequisiteSkillIds: List<String> = emptyList(),
+    val cumulativeSkillsLabel: String = "",
+    val diagramCaption: String = learningObjective
 )
 
 data class CurriculumUnit(

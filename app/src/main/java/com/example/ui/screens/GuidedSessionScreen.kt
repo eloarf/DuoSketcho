@@ -39,7 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
 import com.example.data.curriculum.CurriculumCatalog
+import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
 import com.example.domain.model.GuidedSessionPlan
 import com.example.ui.components.AtelierCard
@@ -63,12 +65,17 @@ fun GuidedSessionScreen(
         rating: DifficultyRating,
         checklistRatio: Float,
         reflection: String,
-        needsImprovement: String
+        needsImprovement: String,
+        confidence: ConfidenceLevel
     ) -> Unit
 ) {
     var currentStepIdx by remember(plan) { mutableIntStateOf(0) }
     val steps = plan.steps
     val isSummaryStage = currentStepIdx >= steps.size
+
+    BackHandler(enabled = currentStepIdx > 0) {
+        currentStepIdx -= 1
+    }
 
     val mainLesson = steps.firstNotNullOfOrNull { it.lessonId }?.let { CurriculumCatalog.getLessonById(it) }
     val checklist = mainLesson?.selfAssessmentChecklist ?: listOf(
@@ -78,6 +85,7 @@ fun GuidedSessionScreen(
     )
     var checklistChecked by remember(plan) { mutableStateOf(List(checklist.size) { false }) }
     var rating by remember(plan) { mutableStateOf(DifficultyRating.OKAY) }
+    var confidence by remember(plan) { mutableStateOf(ConfidenceLevel.MODERATE) }
     var reflection by remember(plan) { mutableStateOf("") }
     var needsImprovement by remember(plan) { mutableStateOf("") }
 
@@ -240,7 +248,9 @@ fun GuidedSessionScreen(
                                 checklistChecked = checklistChecked.toMutableList().also { it[idx] = !it[idx] }
                             },
                             selectedRating = rating,
-                            onSelectRating = { rating = it }
+                            onSelectRating = { rating = it },
+                            selectedConfidence = confidence,
+                            onSelectConfidence = { confidence = it }
                         )
                     }
 
@@ -292,7 +302,8 @@ fun GuidedSessionScreen(
                                         rating,
                                         ratio,
                                         reflection.trim(),
-                                        needsImprovement.trim()
+                                        needsImprovement.trim(),
+                                        confidence
                                     )
                                 },
                                 containerColor = AtelierSage,

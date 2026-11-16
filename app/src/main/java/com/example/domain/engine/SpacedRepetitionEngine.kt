@@ -1,12 +1,17 @@
 package com.example.domain.engine
 
 import com.example.data.curriculum.CurriculumCatalog
+import com.example.data.curriculum.PedagogicalData
 import com.example.data.local.LessonProgressEntity
 import com.example.data.local.MilestoneProgressEntity
 import com.example.data.local.SkillMasteryEntity
+import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
 import com.example.domain.model.DrawingWorld
+import com.example.domain.model.ExerciseStage
 import com.example.domain.model.MasteryLevel
+import com.example.domain.model.SkillDefinition
+import com.example.domain.model.TutorRecommendation
 import com.example.domain.model.WorldProgressSummary
 import kotlin.math.max
 import kotlin.math.min
@@ -18,37 +23,71 @@ object SpacedRepetitionEngine {
         return MasteryLevel.entries.firstOrNull { it.tierIndex == index } ?: MasteryLevel.NOT_STARTED
     }
 
+    fun confidenceFromIndex(index: Int): ConfidenceLevel {
+        return ConfidenceLevel.entries.firstOrNull { it.index == index } ?: ConfidenceLevel.MODERATE
+    }
+
+    fun recommendedStageForSkill(mastery: SkillMasteryEntity?): ExerciseStage {
+        if (mastery == null || mastery.practiceCount == 0 || mastery.isWeak || mastery.lastConfidenceIndex == ConfidenceLevel.LOW.index) {
+            return ExerciseStage.GUIDED_PRACTICE
+        }
+        return if (mastery.masteryTierIndex >= MasteryLevel.PROFICIENT.tierIndex || mastery.delayedCheckPending) {
+            ExerciseStage.UNFAMILIAR_APPLICATION
+        } else {
+            ExerciseStage.INDEPENDENT_PRACTICE
+        }
+    }
+
     fun recordSkillPractice(
         existing: SkillMasteryEntity?,
         skillId: String,
         rating: DifficultyRating,
         checklistRatio: Float,
-        todayEpochDay: Long
+        todayEpochDay: Long,
+        confidence: ConfidenceLevel = ConfidenceLevel.MODERATE
     ): SkillMasteryEntity {
         val current = existing ?: SkillMasteryEntity(skillId = skillId)
         val clampedRatio = checklistRatio.coerceIn(0f, 1f)
+        val firstDay = when {
+            current.firstPracticedEpochDay > 0L -> current.firstPracticedEpochDay
+            current.lastPracticedEpochDay > 0L -> current.lastPracticedEpochDay
+            else -> todayEpochDay
+        }
         val isNewDay = current.lastPracticedEpochDay != todayEpochDay
         val newPracticeCount = current.practiceCount + 1
         val newDistinctDays = if (isNewDay) current.distinctDaysPracticed + 1 else max(1, current.distinctDaysPracticed)
         val bestRatio = max(current.bestChecklistRatio, clampedRatio)
 
-        val passed = rating != DifficultyRating.DIFFICULT && clampedRatio >= 0.65f
+        val passed = rating != DifficultyRating.DIFFICULT &&
+            confidence != ConfidenceLevel.LOW &&
+            clampedRatio >= 0.65f
         val newConsecutiveSuccesses = if (passed) current.consecutiveSuccesses + 1 else 0
 
-        val newEase = when (rating) {
-            DifficultyRating.DIFFICULT -> max(1.3f, current.easeFactor - 0.2f)
-            DifficultyRating.OKAY -> current.easeFactor
-            DifficultyRating.EASY -> min(2.8f, current.easeFactor + 0.1f)
+        val newEase = when {
+            rating == DifficultyRating.DIFFICULT || confidence == ConfidenceLevel.LOW ->
+                max(1.3f, current.easeFactor - 0.2f)
+            rating == DifficultyRating.EASY && confidence == ConfidenceLevel.HIGH ->
+                min(2.8f, current.easeFactor + 0.15f)
+            rating == DifficultyRating.EASY ->
+                min(2.8f, current.easeFactor + 0.1f)
+            confidence == ConfidenceLevel.HIGH ->
+                min(2.8f, current.easeFactor + 0.05f)
+            else -> current.easeFactor
         }
 
-        val newInterval = when (rating) {
-            DifficultyRating.DIFFICULT -> 1
-            DifficultyRating.OKAY -> when {
+        var newInterval = when {
+            !passed -> 1
+            rating == DifficultyRating.OKAY -> when {
                 newPracticeCount <= 1 -> 1
                 newPracticeCount == 2 -> 3
                 else -> (current.intervalDays * newEase).roundToInt().coerceIn(2, 45)
             }
-            DifficultyRating.EASY -> when {
+            rating == DifficultyRating.EASY && confidence == ConfidenceLevel.HIGH -> when {
+                newPracticeCount <= 1 -> 3
+                newPracticeCount == 2 -> 7
+                else -> (current.intervalDays * newEase * 1.35f).roundToInt().coerceIn(4, 60)
+            }
+            else -> when {
                 newPracticeCount <= 1 -> 2
                 newPracticeCount == 2 -> 6
                 else -> (current.intervalDays * newEase * 1.25f).roundToInt().coerceIn(3, 60)
@@ -56,22 +95,46 @@ object SpacedRepetitionEngine {
         }
 
         val newWeak = when {
-            rating == DifficultyRating.DIFFICULT || clampedRatio < 0.6f -> true
-            newConsecutiveSuccesses >= 2 -> false
+            rating == DifficultyRating.DIFFICULT || confidence == ConfidenceLevel.LOW || clampedRatio < 0.6f -> true
+            newConsecutiveSuccesses >= 2 && confidence != ConfidenceLevel.LOW -> false
             else -> current.isWeak
         }
 
-        val tierIndex = computeMasteryTier(
+        val elapsedDays = todayEpochDay - firstDay
+        val rawTier = computeMasteryTier(
             practiceCount = newPracticeCount,
             distinctDays = newDistinctDays,
             consecutiveSuccesses = newConsecutiveSuccesses,
             bestRatio = bestRatio,
             easeFactor = newEase,
-            isWeak = newWeak
-        ).tierIndex
+            isWeak = newWeak,
+            elapsedSinceFirstDay = elapsedDays,
+            delayedCheckPassed = passed && (current.delayedCheckPending || elapsedDays >= 7L)
+        )
+
+        val coreReadyForMastery = (newPracticeCount >= 7 || (newPracticeCount >= 5 && newEase >= 2.2f)) &&
+            newDistinctDays >= 4 &&
+            newConsecutiveSuccesses >= 4 &&
+            bestRatio >= 0.85f &&
+            !newWeak
+
+        val nextDelayedCheckPending = if (!passed) {
+            false
+        } else if (rawTier == MasteryLevel.MASTERED) {
+            false
+        } else if (coreReadyForMastery) {
+            true
+        } else {
+            current.delayedCheckPending
+        }
+
+        if (nextDelayedCheckPending && rawTier != MasteryLevel.MASTERED) {
+            val daysUntilSeven = (7L - elapsedDays).coerceIn(3L, 7L).toInt()
+            newInterval = min(newInterval, daysUntilSeven)
+        }
 
         return current.copy(
-            masteryTierIndex = tierIndex,
+            masteryTierIndex = rawTier.tierIndex,
             practiceCount = newPracticeCount,
             distinctDaysPracticed = newDistinctDays,
             consecutiveSuccesses = newConsecutiveSuccesses,
@@ -80,13 +143,17 @@ object SpacedRepetitionEngine {
             intervalDays = newInterval,
             nextReviewEpochDay = todayEpochDay + newInterval,
             lastPracticedEpochDay = todayEpochDay,
-            isWeak = newWeak
+            isWeak = newWeak,
+            lastConfidenceIndex = confidence.index,
+            delayedCheckPending = nextDelayedCheckPending,
+            firstPracticedEpochDay = firstDay
         )
     }
 
     /**
      * Never marks a skill Mastered after one exercise.
-     * Requires repeated deliberate practice across multiple days and sustained successful reviews.
+     * Requires repeated deliberate practice across multiple distinct days, sustained success,
+     * and a delayed retention window (>= 7 elapsed days or delayed check pass).
      */
     fun computeMasteryTier(
         practiceCount: Int,
@@ -94,25 +161,29 @@ object SpacedRepetitionEngine {
         consecutiveSuccesses: Int,
         bestRatio: Float,
         easeFactor: Float,
-        isWeak: Boolean
+        isWeak: Boolean,
+        elapsedSinceFirstDay: Long = 7L,
+        delayedCheckPassed: Boolean = true
     ): MasteryLevel {
         if (practiceCount <= 0) return MasteryLevel.NOT_STARTED
         if (practiceCount == 1) return MasteryLevel.INTRODUCED
 
-        val canMaster = (practiceCount >= 7 || (practiceCount >= 5 && easeFactor >= 2.2f)) &&
+        val canMasterCore = (practiceCount >= 7 || (practiceCount >= 5 && easeFactor >= 2.2f)) &&
             distinctDays >= 4 &&
             consecutiveSuccesses >= 4 &&
             bestRatio >= 0.85f &&
             !isWeak
 
-        if (canMaster) return MasteryLevel.MASTERED
+        if (canMasterCore && elapsedSinceFirstDay >= 7L && delayedCheckPassed) {
+            return MasteryLevel.MASTERED
+        }
 
         val canProficient = practiceCount >= 5 &&
             distinctDays >= 3 &&
             consecutiveSuccesses >= 3 &&
             bestRatio >= 0.75f &&
             !isWeak
-        if (canProficient) return MasteryLevel.PROFICIENT
+        if (canProficient || canMasterCore) return MasteryLevel.PROFICIENT
 
         val canDevelop = practiceCount >= 3 &&
             distinctDays >= 2 &&
@@ -124,7 +195,104 @@ object SpacedRepetitionEngine {
     }
 
     fun isSkillDue(skill: SkillMasteryEntity, todayEpochDay: Long): Boolean {
-        return skill.practiceCount > 0 && (skill.nextReviewEpochDay <= todayEpochDay || skill.isWeak)
+        return skill.practiceCount > 0 && (
+            skill.nextReviewEpochDay <= todayEpochDay ||
+                skill.isWeak ||
+                (skill.delayedCheckPending && skill.nextReviewEpochDay <= todayEpochDay + 1L)
+            )
+    }
+
+    fun findWeakPrerequisites(
+        skillId: String,
+        skillMasteryMap: Map<String, SkillMasteryEntity>
+    ): List<SkillDefinition> {
+        val prereqIds = PedagogicalData.skillPrerequisites[skillId].orEmpty()
+        return prereqIds.mapNotNull { pid ->
+            val mastery = skillMasteryMap[pid]
+            val struggling = mastery != null && (mastery.isWeak || mastery.lastConfidenceIndex == ConfidenceLevel.LOW.index)
+            if (struggling) CurriculumCatalog.getSkillById(pid) else null
+        }
+    }
+
+    fun recommendNextTutorAction(
+        worldSummaries: List<WorldProgressSummary>,
+        lessonProgressMap: Map<String, LessonProgressEntity>,
+        skillMasteryMap: Map<String, SkillMasteryEntity>,
+        todayEpochDay: Long
+    ): TutorRecommendation {
+        val nextLesson = SessionBuilderEngine.selectNextLesson(worldSummaries, lessonProgressMap)
+
+        // 1. Weak prerequisite remediation: if a prerequisite for the next lesson (or a currently weak skill) is struggling, fix the root first
+        val weakPrereqs = findWeakPrerequisites(nextLesson.primarySkillId, skillMasteryMap)
+        if (weakPrereqs.isNotEmpty()) {
+            val prereq = weakPrereqs.first()
+            val prereqLesson = CurriculumCatalog.allLessons.firstOrNull { it.primarySkillId == prereq.id } ?: nextLesson
+            return TutorRecommendation(
+                title = "Strengthen Foundation: ${prereq.name}",
+                reason = "Your recent practice flagged uncertainty in ${prereq.name}, which directly supports ${nextLesson.title}. Tightening it first prevents repeating errors.",
+                actionLabel = "Drill Foundation (${prereqLesson.estimatedMinutes}m)",
+                targetLessonId = prereqLesson.id,
+                targetSkillId = prereq.id,
+                recommendedStage = ExerciseStage.GUIDED_PRACTICE,
+                isPrerequisiteRemediation = true
+            )
+        }
+
+        // 2. Delayed mastery check due
+        val delayedCandidate = skillMasteryMap.values
+            .filter { it.delayedCheckPending && it.nextReviewEpochDay <= todayEpochDay }
+            .sortedBy { it.nextReviewEpochDay }
+            .firstOrNull()
+        if (delayedCandidate != null) {
+            val skill = CurriculumCatalog.getSkillById(delayedCandidate.skillId)
+            val targetLesson = CurriculumCatalog.allLessons.firstOrNull { it.primarySkillId == delayedCandidate.skillId } ?: nextLesson
+            return TutorRecommendation(
+                title = "Delayed Mastery Check: ${skill?.name ?: delayedCandidate.skillId}",
+                reason = "You showed strong consistency earlier — complete one unguided retention check after spacing to lock in Mastery.",
+                actionLabel = "Verify Mastery",
+                targetLessonId = targetLesson.id,
+                targetSkillId = delayedCandidate.skillId,
+                recommendedStage = ExerciseStage.UNFAMILIAR_APPLICATION,
+                isDelayedMasteryCheck = true
+            )
+        }
+
+        // 3. Overdue weak skill needing reinforcement
+        val weakSkill = skillMasteryMap.values
+            .filter { it.practiceCount > 0 && it.isWeak && it.nextReviewEpochDay <= todayEpochDay }
+            .sortedWith(compareBy<SkillMasteryEntity> { it.lastConfidenceIndex }.thenBy { it.nextReviewEpochDay })
+            .firstOrNull()
+        if (weakSkill != null) {
+            val skill = CurriculumCatalog.getSkillById(weakSkill.skillId)
+            val targetLesson = CurriculumCatalog.allLessons.firstOrNull { it.primarySkillId == weakSkill.skillId } ?: nextLesson
+            return TutorRecommendation(
+                title = "Reinforce Weak Skill: ${skill?.name ?: weakSkill.skillId}",
+                reason = "Marked difficult or low-confidence recently. A focused repeat at Guided/Independent stage will rebuild control.",
+                actionLabel = "Practice Weakness",
+                targetLessonId = targetLesson.id,
+                targetSkillId = weakSkill.skillId,
+                recommendedStage = recommendedStageForSkill(weakSkill),
+                isWeakSkillReview = true
+            )
+        }
+
+        // 4. Forward structured curriculum lesson
+        val existingSkill = skillMasteryMap[nextLesson.primarySkillId]
+        val stage = recommendedStageForSkill(existingSkill)
+        val reason = if (existingSkill == null || existingSkill.practiceCount == 0) {
+            "New concept ready for your sketchbook: starts with Understand -> Observe -> Deconstruct before guided drills."
+        } else {
+            "Continue progressing at ${stage.displayName} level based on your prior confidence."
+        }
+
+        return TutorRecommendation(
+            title = nextLesson.title,
+            reason = reason,
+            actionLabel = "Start Lesson (~${nextLesson.estimatedMinutes}m)",
+            targetLessonId = nextLesson.id,
+            targetSkillId = nextLesson.primarySkillId,
+            recommendedStage = stage
+        )
     }
 
     fun computeWorldSummaries(

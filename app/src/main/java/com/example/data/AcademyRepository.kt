@@ -21,6 +21,7 @@ import com.example.domain.engine.DateTimeUtils
 import com.example.domain.engine.SpacedRepetitionEngine
 import com.example.domain.engine.StreakAndXpEngine
 import com.example.domain.model.AchievementDefinition
+import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
 import com.example.domain.model.GuidedSessionPlan
 import com.example.domain.model.Lesson
@@ -91,7 +92,8 @@ class AcademyRepository(
         minutesPracticed: Int,
         includeChallenge: Boolean,
         reflectionNote: String = "",
-        needsImprovementNote: String = ""
+        needsImprovementNote: String = "",
+        confidence: ConfidenceLevel = ConfidenceLevel.MODERATE
     ): PracticeCompletionResult {
         val now = System.currentTimeMillis()
         val today = DateTimeUtils.currentEpochDay(now)
@@ -134,7 +136,8 @@ class AcademyRepository(
                     skillId = skillId,
                     rating = rating,
                     checklistRatio = if (idx == 0) checklistRatio else (checklistRatio * 0.95f),
-                    todayEpochDay = today
+                    todayEpochDay = today,
+                    confidence = confidence
                 )
                 db.skillMasteryDao().upsert(updated)
             }
@@ -205,7 +208,8 @@ class AcademyRepository(
         checklistRatio: Float,
         minutesPracticed: Int,
         reflectionNote: String = "",
-        needsImprovementNote: String = ""
+        needsImprovementNote: String = "",
+        confidence: ConfidenceLevel = ConfidenceLevel.MODERATE
     ): PracticeCompletionResult {
         val now = System.currentTimeMillis()
         val today = DateTimeUtils.currentEpochDay(now)
@@ -249,7 +253,8 @@ class AcademyRepository(
                         skillId = step.skillId,
                         rating = rating,
                         checklistRatio = checklistRatio,
-                        todayEpochDay = today
+                        todayEpochDay = today,
+                        confidence = confidence
                     )
                     db.skillMasteryDao().upsert(updated)
                 }
@@ -302,7 +307,8 @@ class AcademyRepository(
         skillId: String,
         rating: DifficultyRating,
         checklistRatio: Float,
-        minutesPracticed: Int
+        minutesPracticed: Int,
+        confidence: ConfidenceLevel = ConfidenceLevel.MODERATE
     ): PracticeCompletionResult {
         val now = System.currentTimeMillis()
         val today = DateTimeUtils.currentEpochDay(now)
@@ -319,7 +325,8 @@ class AcademyRepository(
                 skillId = skillId,
                 rating = rating,
                 checklistRatio = checklistRatio,
-                todayEpochDay = today
+                todayEpochDay = today,
+                confidence = confidence
             )
             db.skillMasteryDao().upsert(updated)
             db.exerciseLogDao().insert(

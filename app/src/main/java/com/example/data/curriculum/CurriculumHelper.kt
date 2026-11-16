@@ -3,10 +3,12 @@ package com.example.data.curriculum
 import com.example.domain.model.CurriculumUnit
 import com.example.domain.model.DiagramType
 import com.example.domain.model.DrawingWorld
+import com.example.domain.model.ExerciseStage
 import com.example.domain.model.Lesson
 import com.example.domain.model.MilestoneProject
 import com.example.domain.model.MistakeCorrection
 import com.example.domain.model.PracticalExercise
+import com.example.domain.model.RecallQuestion
 import com.example.domain.model.SkillDefinition
 
 internal data class LessonSpec(
@@ -49,6 +51,37 @@ internal fun buildLesson(
     spec: LessonSpec
 ): Lesson {
     val totalMinutes = spec.ex1Min + spec.ex2Min + spec.ex3Min + 3
+    val pedagogy = PedagogicalData.getPedagogy(spec.primarySkillId)
+    val prereqs = PedagogicalData.skillPrerequisites[spec.primarySkillId].orEmpty()
+    val recall = PedagogicalData.recallQuestionsBySkill[spec.primarySkillId] ?: RecallQuestion(
+        prompt = "Before committing dark details in '${spec.title}', what check keeps your drawing structurally sound?",
+        options = listOf(
+            "Verify big proportions, axis alignment, and key light/shadow boundaries first",
+            "Render small surface textures completely in one corner before placing the rest",
+            "Trace the heaviest dark outline immediately"
+        ),
+        correctIndex = 0,
+        explanation = "Checking structure, alignment, and overall hierarchy first prevents costly late corrections."
+    )
+    val caption = PedagogicalData.diagramCaptions[spec.diagramType] ?: spec.objective
+    val mistake1 = spec.mistakes.getOrNull(0)?.let { "${it.first} -> Fix: ${it.second}" }
+        ?: "Avoid rushing straight to details before placing primary axes."
+    val mistake2 = spec.mistakes.getOrNull(1)?.let { "${it.first} -> Fix: ${it.second}" }
+        ?: mistake1
+    val mistake3 = spec.mistakes.lastOrNull()?.let { "${it.first} -> Fix: ${it.second}" }
+        ?: mistake1
+
+    val check1 = spec.checklist.getOrNull(0) ?: spec.criteria
+    val check2 = spec.checklist.getOrNull(1) ?: check1
+    val check3 = spec.checklist.getOrNull(2) ?: spec.criteria
+
+    val cumulativeLabel = buildString {
+        if (prereqs.isNotEmpty()) {
+            append("Builds on earlier skills • ")
+        }
+        append(pedagogy.cumulativeTieIn)
+    }
+
     return Lesson(
         id = spec.id,
         worldNumber = worldNumber,
@@ -68,7 +101,13 @@ internal fun buildLesson(
                 instructions = spec.ex1Desc,
                 repetitions = spec.ex1Reps,
                 estimatedMinutes = spec.ex1Min,
-                skillId = spec.primarySkillId
+                skillId = spec.primarySkillId,
+                stage = ExerciseStage.GUIDED_PRACTICE,
+                techniqueFocus = pedagogy.techniqueFocus,
+                mistakesToAvoid = mistake1,
+                successCriteria = check1,
+                harderVariation = "Repeat once more with a lighter 2H/HB touch and zero erasing.",
+                isUnguided = false
             ),
             PracticalExercise(
                 id = "${spec.id}_ex2",
@@ -76,15 +115,27 @@ internal fun buildLesson(
                 instructions = spec.ex2Desc,
                 repetitions = spec.ex2Reps,
                 estimatedMinutes = spec.ex2Min,
-                skillId = spec.primarySkillId
+                skillId = spec.primarySkillId,
+                stage = ExerciseStage.INDEPENDENT_PRACTICE,
+                techniqueFocus = "${pedagogy.techniqueFocus} Vary size or rotation across each repetition.",
+                mistakesToAvoid = mistake2,
+                successCriteria = check2,
+                harderVariation = pedagogy.harderStretch,
+                isUnguided = false
             ),
             PracticalExercise(
                 id = "${spec.id}_ex3",
                 title = spec.ex3Title,
-                instructions = spec.ex3Desc,
+                instructions = "${spec.ex3Desc} Unfamiliar context cue: ${pedagogy.unfamiliarSubjectHint}",
                 repetitions = spec.ex3Reps,
                 estimatedMinutes = spec.ex3Min,
-                skillId = spec.reinforcedSkillIds.firstOrNull() ?: spec.primarySkillId
+                skillId = spec.reinforcedSkillIds.firstOrNull() ?: spec.primarySkillId,
+                stage = ExerciseStage.UNFAMILIAR_APPLICATION,
+                techniqueFocus = "Apply this method independently without tracing guide marks from earlier steps.",
+                mistakesToAvoid = mistake3,
+                successCriteria = check3,
+                harderVariation = pedagogy.harderStretch,
+                isUnguided = (orderInUnit >= 2 || worldNumber >= 3)
             )
         ),
         optionalChallenge = PracticalExercise(
@@ -94,7 +145,13 @@ internal fun buildLesson(
             repetitions = spec.challengeReps,
             estimatedMinutes = spec.challengeMin,
             skillId = spec.primarySkillId,
-            isChallenge = true
+            isChallenge = true,
+            stage = ExerciseStage.UNFAMILIAR_APPLICATION,
+            techniqueFocus = pedagogy.cumulativeTieIn,
+            mistakesToAvoid = mistake1,
+            successCriteria = spec.criteria,
+            harderVariation = pedagogy.harderStretch,
+            isUnguided = true
         ),
         commonMistakes = spec.mistakes.map { MistakeCorrection(it.first, it.second) },
         selfAssessmentChecklist = spec.checklist,
@@ -103,7 +160,11 @@ internal fun buildLesson(
         diagramType = spec.diagramType,
         primarySkillId = spec.primarySkillId,
         reinforcedSkillIds = spec.reinforcedSkillIds,
-        xpReward = 30 + (worldNumber * 3)
+        xpReward = 30 + (worldNumber * 3),
+        recallQuestion = recall,
+        prerequisiteSkillIds = prereqs,
+        cumulativeSkillsLabel = cumulativeLabel,
+        diagramCaption = caption
     )
 }
 
@@ -190,7 +251,9 @@ object CurriculumCatalog {
             SkillDefinition("sk_stylization", "Intentional Stylization", 12, "Independence", "Shape language, exaggeration, and simplification"),
             SkillDefinition("sk_master_study", "Master Studies & Analysis", 12, "Independence", "Reverse-engineering draftsmanship from old masters"),
             SkillDefinition("sk_portfolio", "Personal Style & Portfolio", 12, "Independence", "Planning and finishing cohesive multi-study plates")
-        )
+        ).map { sk ->
+            sk.copy(prerequisiteSkillIds = PedagogicalData.skillPrerequisites[sk.id].orEmpty())
+        }
     }
 
     val worlds: List<DrawingWorld> by lazy {

@@ -292,14 +292,15 @@ fun DrawingAcademyApp(
                                         if (state.timerRunning) viewModel.pauseTimer() else viewModel.startTimer()
                                     },
                                     onResetTimer = viewModel::resetTimer,
-                                    onCompleteLesson = { rating, ratio, includeCh, reflection, improve ->
+                                    onCompleteLesson = { rating, ratio, includeCh, reflection, improve, confidence ->
                                         viewModel.completeLesson(
                                             lesson = lesson,
                                             rating = rating,
                                             checklistRatio = ratio,
                                             includeChallenge = includeCh,
                                             reflectionNote = reflection,
-                                            needsImprovementNote = improve
+                                            needsImprovementNote = improve,
+                                            confidence = confidence
                                         )
                                         navController.popBackStack()
                                     }
@@ -329,13 +330,14 @@ fun DrawingAcademyApp(
                                             if (state.timerRunning) viewModel.pauseTimer() else viewModel.startTimer()
                                         },
                                         onResetTimer = viewModel::resetTimer,
-                                        onCompleteSession = { rating, ratio, reflection, improve ->
+                                        onCompleteSession = { rating, ratio, reflection, improve, confidence ->
                                             viewModel.completeGuidedSession(
                                                 plan = plan,
                                                 rating = rating,
                                                 checklistRatio = ratio,
                                                 reflectionNote = reflection,
-                                                needsImprovementNote = improve
+                                                needsImprovementNote = improve,
+                                                confidence = confidence
                                             )
                                             navController.popBackStack()
                                         }

@@ -3,6 +3,7 @@ package com.example.domain.engine
 import com.example.data.curriculum.CurriculumCatalog
 import com.example.data.local.LessonProgressEntity
 import com.example.data.local.SkillMasteryEntity
+import com.example.domain.model.ExerciseStage
 import com.example.domain.model.GuidedSessionPlan
 import com.example.domain.model.GuidedSessionStep
 import com.example.domain.model.Lesson
@@ -57,7 +58,6 @@ object SessionBuilderEngine {
                 .firstOrNull { (lessonProgressMap[it.id]?.completedCount ?: 0) == 0 }
             if (uncompleted != null) return uncompleted
         }
-        // Fallback: lowest-completed or latest unlocked lesson
         val lastUnlocked = unlockedWorlds.lastOrNull() ?: worldSummaries.first()
         return lastUnlocked.world.units.first().lessons.first()
     }
@@ -71,6 +71,7 @@ object SessionBuilderEngine {
     ): GuidedSessionPlan {
         val steps = mutableListOf<GuidedSessionStep>()
         var idx = 1
+        val masteryMap = skillMasteries.associateBy { it.skillId }
 
         // 1. Short Warm-up
         val warmup = warmups[(todayEpochDay % warmups.size).toInt().coerceAtLeast(0)]
@@ -88,53 +89,74 @@ object SessionBuilderEngine {
             )
         )
 
-        // 2. New Lesson Concept Briefing
+        // 2. Concept Briefing
         steps.add(
             GuidedSessionStep(
                 stepIndex = idx++,
-                phaseLabel = "2. New Lesson",
+                phaseLabel = "2. New Lesson • Understand",
                 title = nextLesson.title,
                 subtitle = nextLesson.learningObjective,
-                instructions = "${nextLesson.explanation}\n\nSteps:\n" +
+                instructions = "${nextLesson.explanation}\n\nDeconstruct:\n" +
                     nextLesson.steps.mapIndexed { i, s -> "${i + 1}. $s" }.joinToString("\n"),
-                repetitions = "Read & prepare: ${nextLesson.requiredMaterials.joinToString(", ")}",
+                repetitions = "Materials: ${nextLesson.requiredMaterials.joinToString(", ")}",
                 durationMinutes = 2,
                 skillId = nextLesson.primarySkillId,
                 lessonId = nextLesson.id
             )
         )
 
-        // 3. Guided Exercises from the lesson
-        val drillsToInclude = if (mode == SessionMode.QUICK_10_15) {
-            nextLesson.exercises.take(2)
-        } else {
-            nextLesson.exercises
+        // 3. Adaptive Drills from Lesson (Stage 1 -> Stage 2 -> Stage 3)
+        val recommendedStage = SpacedRepetitionEngine.recommendedStageForSkill(masteryMap[nextLesson.primarySkillId])
+        val drillsToInclude = when {
+            mode == SessionMode.QUICK_10_15 && recommendedStage == ExerciseStage.UNFAMILIAR_APPLICATION ->
+                listOf(nextLesson.exercises.first(), nextLesson.exercises.last())
+            mode == SessionMode.QUICK_10_15 ->
+                nextLesson.exercises.take(2)
+            else ->
+                nextLesson.exercises
         }
+
         drillsToInclude.forEachIndexed { drillIdx, ex ->
             val adjustedMin = if (mode == SessionMode.QUICK_10_15) {
                 ex.estimatedMinutes.coerceAtMost(4)
             } else {
                 ex.estimatedMinutes
             }
+            val fullInstructions = buildString {
+                append(ex.instructions)
+                if (ex.techniqueFocus.isNotBlank()) {
+                    append("\n\nFocus: ${ex.techniqueFocus}")
+                }
+                if (ex.mistakesToAvoid.isNotBlank() && !ex.isUnguided) {
+                    append("\nWatch out: ${ex.mistakesToAvoid}")
+                }
+            }
             steps.add(
                 GuidedSessionStep(
                     stepIndex = idx++,
-                    phaseLabel = "3. Guided Exercise ${drillIdx + 1}",
+                    phaseLabel = "3. Guided Exercise ${drillIdx + 1} • ${ex.stage.displayName}",
                     title = ex.title,
-                    subtitle = "Physical notebook drill (${ex.repetitions})",
-                    instructions = ex.instructions,
+                    subtitle = if (ex.isUnguided) "Unguided transfer • ${ex.repetitions}" else "Sketchbook drill • ${ex.repetitions}",
+                    instructions = fullInstructions,
                     repetitions = ex.repetitions,
                     durationMinutes = adjustedMin,
                     skillId = ex.skillId,
-                    lessonId = nextLesson.id
+                    lessonId = nextLesson.id,
+                    isUnguided = ex.isUnguided,
+                    stage = ex.stage
                 )
             )
         }
 
-        // 4. Spaced-Repetition Review of Older Skills
+        // 4. Prerequisite Remediation OR Spaced-Repetition / Delayed Check Review
+        val weakPrerequisites = SpacedRepetitionEngine.findWeakPrerequisites(nextLesson.primarySkillId, masteryMap)
         val dueReviews = skillMasteries
             .filter { it.skillId != nextLesson.primarySkillId && SpacedRepetitionEngine.isSkillDue(it, todayEpochDay) }
-            .sortedWith(compareByDescending<SkillMasteryEntity> { it.isWeak }.thenBy { it.nextReviewEpochDay })
+            .sortedWith(
+                compareByDescending<SkillMasteryEntity> { it.delayedCheckPending }
+                    .thenByDescending { it.isWeak }
+                    .thenBy { it.nextReviewEpochDay }
+            )
 
         val reviewTargets = if (dueReviews.isNotEmpty()) {
             dueReviews.take(if (mode == SessionMode.QUICK_10_15) 1 else 2)
@@ -145,60 +167,107 @@ object SessionBuilderEngine {
                 .take(1)
         }
 
-        if (reviewTargets.isEmpty()) {
-            // Day-1 fallback: reinforce sighting/contour observation alongside today's new concept
+        var addedReviews = 0
+        if (weakPrerequisites.isNotEmpty()) {
+            val prereq = weakPrerequisites.first()
+            val prereqLesson = CurriculumCatalog.allLessons.firstOrNull { it.primarySkillId == prereq.id }
+            val prereqEx = prereqLesson?.exercises?.firstOrNull()
             steps.add(
                 GuidedSessionStep(
                     stepIndex = idx++,
-                    phaseLabel = "4. Reinforcement Review",
+                    phaseLabel = "4. Prerequisite Repair",
+                    title = "Tighten Foundation: ${prereq.name}",
+                    subtitle = "Supports ${nextLesson.title} — fix core error before rushing forward",
+                    instructions = prereqEx?.instructions ?: prereq.description,
+                    repetitions = prereqEx?.repetitions ?: "1 focused foundational plate",
+                    durationMinutes = 3,
+                    skillId = prereq.id,
+                    lessonId = prereqLesson?.id ?: nextLesson.id,
+                    isReview = true,
+                    isPrerequisiteRemediation = true,
+                    stage = ExerciseStage.GUIDED_PRACTICE
+                )
+            )
+            addedReviews++
+        }
+
+        if (reviewTargets.isEmpty() && addedReviews == 0) {
+            steps.add(
+                GuidedSessionStep(
+                    stepIndex = idx++,
+                    phaseLabel = "4. Unfamiliar Audit",
                     title = "1-Minute Proportion & Contour Check",
-                    subtitle = "Re-check your fresh sketch using plumb lines and negative space",
+                    subtitle = "Re-check your fresh sketch without reference hints",
                     instructions = "Hold your pencil vertically at arm's length and verify two major alignment points and one negative space cutout on your own drawing.",
                     repetitions = "1 complete proportional audit",
                     durationMinutes = 2,
                     skillId = "sk_sight_prop",
                     lessonId = nextLesson.id,
-                    isReview = true
+                    isReview = true,
+                    isUnguided = true,
+                    stage = ExerciseStage.UNFAMILIAR_APPLICATION
                 )
             )
         } else {
-            reviewTargets.forEachIndexed { rIdx, mastery ->
-                val skill = CurriculumCatalog.getSkillById(mastery.skillId)
-                val matchingLesson = CurriculumCatalog.allLessons.firstOrNull { it.primarySkillId == mastery.skillId }
-                val reviewExercise = matchingLesson?.exercises?.firstOrNull()
-                steps.add(
-                    GuidedSessionStep(
-                        stepIndex = idx++,
-                        phaseLabel = if (reviewTargets.size > 1) "4. Skill Review ${rIdx + 1}" else "4. Skill Review",
-                        title = "Review: ${skill?.name ?: mastery.skillId}",
-                        subtitle = if (mastery.isWeak) "Weak-skill reinforcement drill" else "Spaced-repetition retention check",
-                        instructions = reviewExercise?.instructions
-                            ?: (skill?.description ?: "Complete a focused 3-minute recall study in your sketchbook."),
-                        repetitions = reviewExercise?.repetitions ?: "1 focused recall plate",
-                        durationMinutes = if (mode == SessionMode.QUICK_10_15) 3 else 4,
-                        skillId = mastery.skillId,
-                        lessonId = matchingLesson?.id,
-                        isReview = true
+            val remainingReviewSlots = (if (mode == SessionMode.QUICK_10_15) 1 else 2) - addedReviews
+            reviewTargets
+                .filter { target -> weakPrerequisites.none { it.id == target.skillId } }
+                .take(remainingReviewSlots.coerceAtLeast(0))
+                .forEachIndexed { rIdx, mastery ->
+                    val skill = CurriculumCatalog.getSkillById(mastery.skillId)
+                    val matchingLesson = CurriculumCatalog.allLessons.firstOrNull { it.primarySkillId == mastery.skillId }
+                    val targetStage = SpacedRepetitionEngine.recommendedStageForSkill(mastery)
+                    val exercise = when (targetStage) {
+                        ExerciseStage.GUIDED_PRACTICE -> matchingLesson?.exercises?.getOrNull(0)
+                        ExerciseStage.INDEPENDENT_PRACTICE -> matchingLesson?.exercises?.getOrNull(1)
+                        ExerciseStage.UNFAMILIAR_APPLICATION -> matchingLesson?.exercises?.getOrNull(2)
+                    } ?: matchingLesson?.exercises?.firstOrNull()
+
+                    steps.add(
+                        GuidedSessionStep(
+                            stepIndex = idx++,
+                            phaseLabel = when {
+                                mastery.delayedCheckPending -> "4. Delayed Mastery Check"
+                                reviewTargets.size > 1 -> "4. Interleaved Review ${rIdx + 1}"
+                                else -> "4. Interleaved Review"
+                            },
+                            title = "Review: ${skill?.name ?: mastery.skillId}",
+                            subtitle = when {
+                                mastery.delayedCheckPending -> "Unguided retention test before Mastery lock"
+                                mastery.isWeak -> "Weak-skill reinforcement • ${targetStage.displayName}"
+                                else -> "Spaced check in fresh context • ${targetStage.displayName}"
+                            },
+                            instructions = exercise?.instructions
+                                ?: (skill?.description ?: "Complete a focused 3-minute recall study in your sketchbook."),
+                            repetitions = exercise?.repetitions ?: "1 focused recall plate",
+                            durationMinutes = if (mode == SessionMode.QUICK_10_15) 3 else 4,
+                            skillId = mastery.skillId,
+                            lessonId = matchingLesson?.id,
+                            isReview = true,
+                            isUnguided = mastery.delayedCheckPending || targetStage == ExerciseStage.UNFAMILIAR_APPLICATION,
+                            stage = targetStage
+                        )
                     )
-                )
-            }
+                }
         }
 
-        // 5. Optional Harder Challenge
+        // 5. Optional Cumulative Harder Challenge
         if (includeOptionalChallenge) {
             val ch = nextLesson.optionalChallenge
             steps.add(
                 GuidedSessionStep(
                     stepIndex = idx,
-                    phaseLabel = "5. Optional Challenge",
+                    phaseLabel = "5. Cumulative Challenge",
                     title = ch.title,
-                    subtitle = "Stretch goal for deeper skill consolidation",
+                    subtitle = nextLesson.cumulativeSkillsLabel.ifBlank { "Stretch goal for deeper consolidation" },
                     instructions = ch.instructions,
                     repetitions = ch.repetitions,
                     durationMinutes = ch.estimatedMinutes.coerceAtMost(8),
                     skillId = ch.skillId,
                     lessonId = nextLesson.id,
-                    isOptionalChallenge = true
+                    isOptionalChallenge = true,
+                    isUnguided = true,
+                    stage = ExerciseStage.UNFAMILIAR_APPLICATION
                 )
             )
         }

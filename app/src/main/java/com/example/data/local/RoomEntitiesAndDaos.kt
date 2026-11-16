@@ -32,7 +32,10 @@ data class SkillMasteryEntity(
     val intervalDays: Int = 1,
     val nextReviewEpochDay: Long = 0L,
     val lastPracticedEpochDay: Long = 0L,
-    val isWeak: Boolean = false
+    val isWeak: Boolean = false,
+    val lastConfidenceIndex: Int = 1, // 0=LOW, 1=MODERATE, 2=HIGH
+    val delayedCheckPending: Boolean = false,
+    val firstPracticedEpochDay: Long = 0L
 )
 
 @Entity(tableName = "exercise_logs")

@@ -23,6 +23,7 @@ import com.example.domain.engine.StreakAndXpEngine
 import com.example.domain.engine.StreakSummary
 import com.example.domain.engine.WeeklyReportEngine
 import com.example.domain.model.AchievementDefinition
+import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
 import com.example.domain.model.GuidedSessionPlan
 import com.example.domain.model.LearnerLevel
@@ -32,6 +33,7 @@ import com.example.domain.model.MilestoneProject
 import com.example.domain.model.ObservationChallenge
 import com.example.domain.model.SessionMode
 import com.example.domain.model.SkillDefinition
+import com.example.domain.model.TutorRecommendation
 import com.example.domain.model.WeeklyReport
 import com.example.domain.model.WorldProgressSummary
 import com.example.ui.theme.ThemePreference
@@ -87,6 +89,7 @@ data class AcademyUiState(
     val unlockedAchievements: List<UnlockedAchievementItem> = emptyList(),
     val quickSessionPlan: GuidedSessionPlan? = null,
     val deepSessionPlan: GuidedSessionPlan? = null,
+    val tutorRecommendation: TutorRecommendation? = null,
     val timerRunning: Boolean = false,
     val timerSeconds: Int = 0,
     val lastCompletionResult: PracticeCompletionResult? = null,
@@ -209,6 +212,12 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
             skillMasteries = snapshot.skillMasteries,
             todayEpochDay = today
         )
+        val tutorRec = SpacedRepetitionEngine.recommendNextTutorAction(
+            worldSummaries = worldSummaries,
+            lessonProgressMap = lessonProgressMap,
+            skillMasteryMap = skillMasteryMap,
+            todayEpochDay = today
+        )
 
         return AcademyUiState(
             isLoading = false,
@@ -240,6 +249,7 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
             unlockedAchievements = unlockedAchievements,
             quickSessionPlan = quickPlan,
             deepSessionPlan = deepPlan,
+            tutorRecommendation = tutorRec,
             timerRunning = timerRunning,
             timerSeconds = timerSeconds,
             lastCompletionResult = completion,
@@ -275,7 +285,8 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
         checklistRatio: Float,
         includeChallenge: Boolean,
         reflectionNote: String = "",
-        needsImprovementNote: String = ""
+        needsImprovementNote: String = "",
+        confidence: ConfidenceLevel = ConfidenceLevel.MODERATE
     ) {
         viewModelScope.launch {
             val timerMinutes = (timerSecondsFlow.value / 60).coerceAtLeast(0)
@@ -287,7 +298,8 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
                 minutesPracticed = minutes,
                 includeChallenge = includeChallenge,
                 reflectionNote = reflectionNote,
-                needsImprovementNote = needsImprovementNote
+                needsImprovementNote = needsImprovementNote,
+                confidence = confidence
             )
             resetTimer()
             lastCompletionFlow.value = result
@@ -299,7 +311,8 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
         rating: DifficultyRating,
         checklistRatio: Float,
         reflectionNote: String = "",
-        needsImprovementNote: String = ""
+        needsImprovementNote: String = "",
+        confidence: ConfidenceLevel = ConfidenceLevel.MODERATE
     ) {
         viewModelScope.launch {
             val timerMinutes = (timerSecondsFlow.value / 60).coerceAtLeast(0)
@@ -310,7 +323,8 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
                 checklistRatio = checklistRatio,
                 minutesPracticed = minutes,
                 reflectionNote = reflectionNote,
-                needsImprovementNote = needsImprovementNote
+                needsImprovementNote = needsImprovementNote,
+                confidence = confidence
             )
             resetTimer()
             lastCompletionFlow.value = result
@@ -321,7 +335,8 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
         skillId: String,
         rating: DifficultyRating,
         checklistRatio: Float,
-        minutesPracticed: Int = 5
+        minutesPracticed: Int = 5,
+        confidence: ConfidenceLevel = ConfidenceLevel.MODERATE
     ) {
         viewModelScope.launch {
             val timerMinutes = (timerSecondsFlow.value / 60).coerceAtLeast(0)
@@ -330,7 +345,8 @@ class AcademyViewModel(application: Application) : AndroidViewModel(application)
                 skillId = skillId,
                 rating = rating,
                 checklistRatio = checklistRatio,
-                minutesPracticed = minutes
+                minutesPracticed = minutes,
+                confidence = confidence
             )
             resetTimer()
             lastCompletionFlow.value = result

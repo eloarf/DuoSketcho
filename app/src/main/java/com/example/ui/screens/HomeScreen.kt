@@ -163,13 +163,26 @@ fun HomeScreen(
                 }
             }
 
-            // Continue Learning Hero Card
+            // Personal Tutor Recommendation / Continue Learning Hero Card
             item {
+                val rec = state.tutorRecommendation
                 val world = state.currentWorldSummary?.world
                 val unit = world?.units?.firstOrNull { it.id == state.nextLesson.unitId }
+                val targetLessonId = rec?.targetLessonId ?: state.nextLesson.id
+                val badgeText = when {
+                    rec?.isPrerequisiteRemediation == true -> "PREREQUISITE FOCUS"
+                    rec?.isDelayedMasteryCheck == true -> "DELAYED MASTERY CHECK"
+                    rec?.isWeakSkillReview == true -> "REINFORCE WEAK SKILL"
+                    else -> "RECOMMENDED NEXT STEP"
+                }
+                val accentColor = when {
+                    rec?.isPrerequisiteRemediation == true || rec?.isWeakSkillReview == true -> TerracottaFlame
+                    rec?.isDelayedMasteryCheck == true -> AtelierSage
+                    else -> BlueprintCobalt
+                }
                 AtelierCard(
                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                    borderColor = BlueprintCobalt.copy(alpha = 0.4f)
+                    borderColor = accentColor.copy(alpha = 0.45f)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -177,13 +190,13 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "CONTINUE LEARNING",
+                            text = badgeText,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = BlueprintCobalt
+                            color = accentColor
                         )
                         Text(
-                            text = "World ${state.nextLesson.worldNumber} • ~${state.nextLesson.estimatedMinutes} min",
+                            text = rec?.recommendedStage?.displayName ?: "World ${state.nextLesson.worldNumber}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -195,7 +208,7 @@ fun HomeScreen(
                         color = BlueprintCobalt,
                         fontWeight = FontWeight.SemiBold
                     )
-                    if (unit != null) {
+                    if (unit != null && rec?.isPrerequisiteRemediation != true) {
                         Text(
                             text = "Unit ${unit.orderInWorld}: ${unit.title}",
                             style = MaterialTheme.typography.bodySmall,
@@ -204,22 +217,23 @@ fun HomeScreen(
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = state.nextLesson.title,
+                        text = rec?.title ?: state.nextLesson.title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = state.nextLesson.learningObjective,
+                        text = rec?.reason ?: state.nextLesson.learningObjective,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(Modifier.height(14.dp))
                     TactilePrimaryButton(
-                        text = "Open Next Lesson",
-                        onClick = { onOpenLesson(state.nextLesson.id) },
+                        text = rec?.actionLabel ?: "Open Next Lesson",
+                        onClick = { onOpenLesson(targetLessonId) },
+                        containerColor = accentColor,
                         testTag = "continue_next_lesson_button"
                     )
                 }

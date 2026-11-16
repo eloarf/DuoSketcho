@@ -20,7 +20,7 @@ import org.json.JSONObject
 
 object BackupManager {
 
-    private const val SCHEMA_VERSION = 1
+    private const val SCHEMA_VERSION = 2
 
     suspend fun exportToJson(
         db: DrawingAcademyDatabase,
@@ -81,6 +81,9 @@ object BackupManager {
                         put("nextReviewEpochDay", it.nextReviewEpochDay)
                         put("lastPracticedEpochDay", it.lastPracticedEpochDay)
                         put("isWeak", it.isWeak)
+                        put("lastConfidenceIndex", it.lastConfidenceIndex)
+                        put("delayedCheckPending", it.delayedCheckPending)
+                        put("firstPracticedEpochDay", it.firstPracticedEpochDay)
                     })
                 }
             })
@@ -224,7 +227,10 @@ object BackupManager {
                         intervalDays = o.getInt("intervalDays"),
                         nextReviewEpochDay = o.getLong("nextReviewEpochDay"),
                         lastPracticedEpochDay = o.getLong("lastPracticedEpochDay"),
-                        isWeak = o.optBoolean("isWeak", false)
+                        isWeak = o.optBoolean("isWeak", false),
+                        lastConfidenceIndex = o.optInt("lastConfidenceIndex", 1),
+                        delayedCheckPending = o.optBoolean("delayedCheckPending", false),
+                        firstPracticedEpochDay = o.optLong("firstPracticedEpochDay", 0L)
                     )
                 )
             }

@@ -10,13 +10,19 @@ enum class MasteryLevel(
     PRACTICING(2, "Practicing", "Building muscle memory through repetition"),
     DEVELOPING(3, "Developing", "Consistent execution emerging across sessions"),
     PROFICIENT(4, "Proficient", "Reliable control under varied subjects"),
-    MASTERED(5, "Mastered", "Verified across multiple spaced assessments")
+    MASTERED(5, "Mastered", "Verified across delayed spaced checks")
 }
 
 enum class DifficultyRating(val label: String, val xpBonus: Int) {
     DIFFICULT("Difficult", 5),
     OKAY("Okay", 5),
     EASY("Easy", 5)
+}
+
+enum class ConfidenceLevel(val index: Int, val label: String, val shortLabel: String) {
+    LOW(0, "Low Confidence", "Unsure"),
+    MODERATE(1, "Somewhat Confident", "Growing"),
+    HIGH(2, "Confident", "Solid")
 }
 
 enum class SessionMode(val label: String, val targetMinutes: Int, val includeOptionalChallenge: Boolean) {
@@ -51,7 +57,10 @@ data class GuidedSessionStep(
     val skillId: String,
     val lessonId: String?,
     val isReview: Boolean = false,
-    val isOptionalChallenge: Boolean = false
+    val isOptionalChallenge: Boolean = false,
+    val isUnguided: Boolean = false,
+    val isPrerequisiteRemediation: Boolean = false,
+    val stage: ExerciseStage = ExerciseStage.GUIDED_PRACTICE
 )
 
 data class GuidedSessionPlan(
@@ -59,6 +68,25 @@ data class GuidedSessionPlan(
     val steps: List<GuidedSessionStep>,
     val totalEstimatedMinutes: Int,
     val estimatedXp: Int
+)
+
+data class TutorRecommendation(
+    val title: String,
+    val reason: String,
+    val actionLabel: String,
+    val targetLessonId: String,
+    val targetSkillId: String,
+    val recommendedStage: ExerciseStage,
+    val isPrerequisiteRemediation: Boolean = false,
+    val isDelayedMasteryCheck: Boolean = false,
+    val isWeakSkillReview: Boolean = false
+)
+
+data class HonestEvaluationFeedback(
+    val headline: String,
+    val observations: List<String>,
+    val nextStepAdvice: String,
+    val prerequisiteAlert: String? = null
 )
 
 data class WeeklyReport(

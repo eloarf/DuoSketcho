@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Warning
@@ -40,17 +40,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.curriculum.PedagogicalData
 import com.example.domain.engine.SpacedRepetitionEngine
+import com.example.domain.model.ConfidenceLevel
 import com.example.domain.model.DifficultyRating
+import com.example.domain.model.ExerciseStage
 import com.example.ui.components.AtelierCard
+import com.example.ui.components.HonestTutorFeedbackCard
 import com.example.ui.components.LessonDiagramCard
 import com.example.ui.components.MasteryPill
+import com.example.ui.components.RecallCheckCard
 import com.example.ui.components.SelfAssessmentSection
 import com.example.ui.components.SketchbookTimerBar
+import com.example.ui.components.StructuredExerciseCard
 import com.example.ui.components.TactilePrimaryButton
 import com.example.ui.theme.AtelierSage
 import com.example.ui.theme.BlueprintCobalt
 import com.example.ui.theme.DustyCrimson
+import com.example.ui.theme.OchreGold
 import com.example.ui.theme.TerracottaFlame
 import com.example.viewmodel.AcademyUiState
 import com.example.viewmodel.DueSkillItem
@@ -59,7 +66,13 @@ import com.example.viewmodel.DueSkillItem
 @Composable
 fun ReviewScreen(
     state: AcademyUiState,
-    onCompleteReview: (skillId: String, rating: DifficultyRating, checklistRatio: Float, minutes: Int) -> Unit,
+    onCompleteReview: (
+        skillId: String,
+        rating: DifficultyRating,
+        checklistRatio: Float,
+        minutes: Int,
+        confidence: ConfidenceLevel
+    ) -> Unit,
     onToggleTimer: () -> Unit,
     onResetTimer: () -> Unit,
     onOpenMistakeLibrary: () -> Unit,
@@ -84,7 +97,7 @@ fun ReviewScreen(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Skills return automatically over widening intervals. Rate difficulty honestly after drawing in your notebook.",
+                    text = "Skills return over adaptive intervals based on both Difficulty and Confidence, ending with an unguided Mastery check.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -116,7 +129,7 @@ fun ReviewScreen(
                             .heightIn(min = 48.dp)
                             .testTag("open_glossary_button")
                     ) {
-                        Icon(Icons.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Art Glossary")
                     }
@@ -205,17 +218,30 @@ fun ReviewScreen(
         }
     }
 
-    // Active Review Drill Runner Modal Sheet
+    // Active Adaptive Review Drill Modal Sheet
     activeDrill?.let { drill ->
         val lesson = drill.recommendedLesson
-        val exercise = lesson?.exercises?.firstOrNull()
+        val recommendedStage = SpacedRepetitionEngine.recommendedStageForSkill(drill.mastery)
+        val exercise = when (recommendedStage) {
+            ExerciseStage.GUIDED_PRACTICE -> lesson?.exercises?.getOrNull(0)
+            ExerciseStage.INDEPENDENT_PRACTICE -> lesson?.exercises?.getOrNull(1)
+            ExerciseStage.UNFAMILIAR_APPLICATION -> lesson?.exercises?.getOrNull(2)
+        } ?: lesson?.exercises?.firstOrNull()
+
         val checklist = lesson?.selfAssessmentChecklist ?: listOf(
             "Observed proportions and angles carefully before committing.",
             "Used deliberate, controlled pencil strokes without chicken-scratching.",
             "Checked values, edges, or perspective convergence honestly."
         )
-        var checkedStates by remember(drill.skill.id) { mutableStateOf(List(checklist.size) { true }) }
+        var drillDone by remember(drill.skill.id) { mutableStateOf(false) }
+        var showHints by remember(drill.skill.id) { mutableStateOf(!(drill.mastery.delayedCheckPending || recommendedStage == ExerciseStage.UNFAMILIAR_APPLICATION)) }
+        var recallIdx by remember(drill.skill.id) { mutableStateOf<Int?>(null) }
+        var checkedStates by remember(drill.skill.id) { mutableStateOf(List(checklist.size) { false }) }
         var rating by remember(drill.skill.id) { mutableStateOf(DifficultyRating.OKAY) }
+        var confidence by remember(drill.skill.id) { mutableStateOf(ConfidenceLevel.MODERATE) }
+
+        val weakPrereqNames = SpacedRepetitionEngine.findWeakPrerequisites(drill.skill.id, state.skillMasteryMap)
+            .map { it.name }
 
         ModalBottomSheet(
             onDismissRequest = {
@@ -236,10 +262,10 @@ fun ReviewScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "SPACED REVIEW DRILL",
+                                text = if (drill.mastery.delayedCheckPending) "DELAYED MASTERY CHECK" else "SPACED REVIEW DRILL",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = BlueprintCobalt
+                                color = if (drill.mastery.delayedCheckPending) OchreGold else BlueprintCobalt
                             )
                             Text(
                                 text = drill.skill.name,
@@ -264,29 +290,32 @@ fun ReviewScreen(
                     item {
                         LessonDiagramCard(
                             diagramType = lesson.diagramType,
-                            caption = lesson.learningObjective
+                            caption = lesson.diagramCaption
                         )
                     }
                 }
 
-                item {
-                    AtelierCard {
-                        Text(
-                            text = exercise?.title ?: "Recall Plate: ${drill.skill.name}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                if (exercise != null) {
+                    item {
+                        StructuredExerciseCard(
+                            exercise = exercise,
+                            checked = drillDone,
+                            onToggleDone = { drillDone = !drillDone },
+                            showScaffoldHints = showHints,
+                            onToggleScaffoldHints = if (exercise.isUnguided || drill.mastery.delayedCheckPending) {
+                                { showHints = !showHints }
+                            } else null,
+                            checkboxTag = "review_exercise_checkbox"
                         )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = exercise?.instructions ?: drill.skill.description,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "Target: ${exercise?.repetitions ?: "1 focused study plate"} • ~${exercise?.estimatedMinutes ?: 5} min",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = BlueprintCobalt,
-                            fontWeight = FontWeight.SemiBold
+                    }
+                }
+
+                if (lesson != null) {
+                    item {
+                        RecallCheckCard(
+                            question = lesson.recallQuestion,
+                            selectedIndex = recallIdx,
+                            onSelectOption = { recallIdx = it }
                         )
                     }
                 }
@@ -299,8 +328,24 @@ fun ReviewScreen(
                             checkedStates = checkedStates.toMutableList().also { it[idx] = !it[idx] }
                         },
                         selectedRating = rating,
-                        onSelectRating = { rating = it }
+                        onSelectRating = { rating = it },
+                        selectedConfidence = confidence,
+                        onSelectConfidence = { confidence = it }
                     )
+                }
+
+                if (lesson != null) {
+                    item {
+                        val feedback = PedagogicalData.evaluateSelfAssessment(
+                            lesson = lesson,
+                            checkedStates = checkedStates,
+                            rating = rating,
+                            confidence = confidence,
+                            recallAnsweredCorrectly = recallIdx?.let { it == lesson.recallQuestion.correctIndex },
+                            prerequisiteWeakNames = weakPrereqNames
+                        )
+                        HonestTutorFeedbackCard(feedback = feedback)
+                    }
                 }
 
                 item {
@@ -308,7 +353,7 @@ fun ReviewScreen(
                     TactilePrimaryButton(
                         text = "Complete Review Drill",
                         onClick = {
-                            onCompleteReview(drill.skill.id, rating, ratio, exercise?.estimatedMinutes ?: 5)
+                            onCompleteReview(drill.skill.id, rating, ratio, exercise?.estimatedMinutes ?: 5, confidence)
                             activeDrill = null
                         },
                         containerColor = AtelierSage,
@@ -328,11 +373,13 @@ private fun DueSkillCard(
     onStartDrill: () -> Unit
 ) {
     val tier = SpacedRepetitionEngine.masteryLevelFromIndex(item.mastery.masteryTierIndex)
+    val stage = SpacedRepetitionEngine.recommendedStageForSkill(item.mastery)
     val daysDiff = item.mastery.nextReviewEpochDay - todayEpochDay
     val dueLabel = when {
-        item.mastery.isWeak -> "Weak skill • Needs reinforcement"
-        daysDiff < 0 -> "Overdue by ${-daysDiff}d"
-        daysDiff == 0L -> "Due today"
+        item.mastery.delayedCheckPending -> "Delayed Mastery check ready"
+        item.mastery.isWeak -> "Weak skill • Needs ${stage.displayName}"
+        daysDiff < 0 -> "Overdue by ${-daysDiff}d • ${stage.displayName}"
+        daysDiff == 0L -> "Due today • ${stage.displayName}"
         else -> "Review in ${daysDiff}d"
     }
 
@@ -365,7 +412,7 @@ private fun DueSkillCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "$dueLabel • Practiced ${item.mastery.practiceCount}× (${item.mastery.distinctDaysPracticed} days)",
+                    text = "$dueLabel • ${item.mastery.practiceCount}× (${item.mastery.distinctDaysPracticed} days)",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (item.mastery.isWeak) DustyCrimson else MaterialTheme.colorScheme.onSurfaceVariant
                 )
